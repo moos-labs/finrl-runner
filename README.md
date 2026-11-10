@@ -55,7 +55,15 @@ the trade env.
   `exchange-calendars` and `wrds` for those import chains (the alpaca/WRDS
   processors are imported, never used). `alpaca-trade-api` pins
   `msgpack==1.0.3`, which has no Python 3.11 wheel and builds from source
-  on the runner.
+  on the runner. That same alpaca pin (`websockets<11`) is also why
+  yfinance is pinned at **0.2.55** and not newer: yfinance ≥0.2.60
+  requires `websockets>=13`, which pip cannot resolve alongside
+  alpaca-trade-api (the first pilot run failed on exactly this conflict).
+- **Yahoo rate-limits GitHub-runner IPs intermittently**
+  (`YFRateLimitError: Too Many Requests` — pilot runs 2 and 3 died at the
+  download step for this reason alone). The script downloads through a
+  `curl_cffi` Chrome-impersonating session and retries up to 3 times with
+  backoff; a re-dispatch also often lands on a fresh runner IP.
 - **FinRL's `YahooDownloader` is not used** — it cannot work with any
   yfinance that still talks to Yahoo today: yfinance ≥0.2.54 returns
   MultiIndex columns and no separate `Adj Close` by default, so
