@@ -61,9 +61,14 @@ the trade env.
   alpaca-trade-api (the first pilot run failed on exactly this conflict).
 - **Yahoo rate-limits GitHub-runner IPs intermittently**
   (`YFRateLimitError: Too Many Requests` — pilot runs 2 and 3 died at the
-  download step for this reason alone). The script downloads through a
-  `curl_cffi` Chrome-impersonating session and retries up to 3 times with
-  backoff; a re-dispatch also often lands on a fresh runner IP.
+  download step for this reason alone, after install and all FinRL
+  imports had succeeded). The script retries the download up to 3 times
+  with backoff, and a re-dispatch lands on a fresh runner IP. A
+  `curl_cffi` Chrome-impersonating session was tried and reverted:
+  yfinance 0.2.55 cannot handle curl_cffi sessions
+  (`'str' object has no attribute 'name'`), and the yfinance versions
+  that can (≥0.2.60) are exactly the ones blocked by the
+  alpaca/websockets conflict above.
 - **FinRL's `YahooDownloader` is not used** — it cannot work with any
   yfinance that still talks to Yahoo today: yfinance ≥0.2.54 returns
   MultiIndex columns and no separate `Adj Close` by default, so
