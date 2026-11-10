@@ -42,17 +42,46 @@ INITIAL_AMOUNT = 1_000_000
 
 
 def download_finrl_frame(ticker: str, start: str, end: str) -> pd.DataFrame:
-    """Download with yfinance and return FinRL's YahooDownloader format."""
-    raw = yf.download(
-        ticker,
-        start=start,
-        end=end,
-        auto_adjust=False,
-        multi_level_index=False,
-        progress=False,
-    )
+    """Download with yfinance and return FinRL's YahooDownloader format.
+
+    Yahoo intermittently rate-limits GitHub-runner IPs
+    (YFRateLimitError / HTTP 429), so download through a curl_cffi
+    Chrome-impersonating session and retry with backoff.
+    """
+    import time
+
+    session = None
+    try:
+        from curl_cffi import requests as curl_requests
+
+        session = curl_requests.Session(impersonate="chrome")
+    except Exception as e:  # pragma: no cover - fallback path
+        print(f"curl_cffi session unavailable ({e}); using default session")
+
+    raw = None
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            raw = yf.download(
+                ticker,
+                start=start,
+                end=end,
+                auto_adjust=False,
+                multi_level_index=False,
+                progress=False,
+                session=session,
+            )
+        except Exception as e:
+            last_err = e
+            raw = None
+        if raw is not None and len(raw) > 0:
+            break
+        print(f"download attempt {attempt} returned no data; retrying...")
+        time.sleep(20 * attempt)
     if raw is None or len(raw) == 0:
-        raise ValueError(f"no data fetched for {ticker} {start}..{end}")
+        raise ValueError(
+            f"no data fetched for {ticker} {start}..{end} (last error: {last_err})"
+        )
     df = raw.reset_index()
     # yfinance columns: Date, Open, High, Low, Close, Adj Close, Volume
     df.columns = [str(c).lower().replace(" ", "") for c in df.columns]
