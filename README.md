@@ -73,10 +73,9 @@ the trade env.
   routes retry with backoff. Run **42828718428** (2026-11-10) succeeded
   on yahooquery attempt 1 and produced the pilot's first backtest:
   A2C, 8,000 timesteps, train 2022-01-03 → 2023-12-30, trade
-  2023-12-30 → 2024-06-29 — portfolio value **1,001,718.99 → 1,153,620.04
-  (+15.16%)** per FinRL's own account-value output (nominal initial
-  amount 1,000,000; the first recorded account value is after the first
-  trade step). A
+  2023-12-30 → 2024-06-29 — portfolio value **1,000,000.00 → 1,152,637.28
+  (+15.26%)** per FinRL's own account-value output (`result.md` and
+  `account_value.csv`, 124 trade-window steps, in that run's artifact). A
   `curl_cffi` Chrome-impersonating session was tried and reverted:
   yfinance 0.2.55 cannot handle curl_cffi sessions
   (`'str' object has no attribute 'name'`), and the yfinance versions
