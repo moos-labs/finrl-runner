@@ -39,8 +39,9 @@ trade window, reporting FinRL's own account-value output.
 | `--trade-start` / `--trade-end` | `2023-12-30` / `2024-06-29` (~6-month trade window) |
 | `--initial-amount` | `1000000` |
 
-Flow (FinRL 0.3.7, the classic StockTradingEnv tutorial): yfinance download
-→ FinRL `FeatureEngineer` with `finrl.config.INDICATORS` → `data_split` →
+Flow (FinRL 0.3.7, the classic StockTradingEnv tutorial): yahooquery
+download (yfinance fallback) → FinRL `FeatureEngineer` with
+`finrl.config.INDICATORS` → `data_split` →
 `StockTradingEnv` → `DRLAgent` A2C `train_model()` → `DRL_prediction()` on
 the trade env.
 
@@ -62,12 +63,20 @@ the trade env.
 - **Yahoo rate-limits GitHub-runner IPs intermittently**
   (`YFRateLimitError: Too Many Requests` — pilot runs 2, 3 and 5 all died
   at the download step for this reason alone, after install and all
-  FinRL imports had succeeded; as of 2026-11-10 the pilot has therefore
-  not yet produced a backtest result, and no result numbers exist).
+  FinRL imports had succeeded).
   The identical yfinance call downloads AAPL fine from a non-GitHub IP,
-  so this is Yahoo throttling GitHub's shared runner IPs, not bad code:
-  re-dispatch the workflow later and it should proceed. The script retries the download up to 3 times
-  with backoff, and a re-dispatch lands on a fresh runner IP. A
+  so this is Yahoo throttling GitHub's shared runner IPs, not bad code.
+  **Fix (2026-11-10):** the script now fetches data via **yahooquery
+  first** (its history endpoint kept working from runner IPs while
+  yfinance and the raw chart API were 429ing — proven by
+  moos-labs/yahooquery-runner), with yfinance kept as a fallback; both
+  routes retry with backoff. Run **42828718428** (2026-11-10) succeeded
+  on yahooquery attempt 1 and produced the pilot's first backtest:
+  A2C, 8,000 timesteps, train 2022-01-03 → 2023-12-30, trade
+  2023-12-30 → 2024-06-29 — portfolio value **1,001,718.99 → 1,153,620.04
+  (+15.16%)** per FinRL's own account-value output (nominal initial
+  amount 1,000,000; the first recorded account value is after the first
+  trade step). A
   `curl_cffi` Chrome-impersonating session was tried and reverted:
   yfinance 0.2.55 cannot handle curl_cffi sessions
   (`'str' object has no attribute 'name'`), and the yfinance versions
