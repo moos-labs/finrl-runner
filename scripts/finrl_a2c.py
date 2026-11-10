@@ -3,9 +3,10 @@
 on one ticker and backtest it on a following trade window.
 
 Standard FinRL flow (FinRL 0.3.7, the classic StockTradingEnv tutorial):
-  1. Download OHLCV data (yfinance data source) and shape it into the exact
-     dataframe FinRL's preprocessor expects (date/open/high/low/close/
-     volume/tic/day, close = adjusted close) -- the same output format as
+  1. Download OHLCV data (yahooquery primary, yfinance fallback) and shape
+     it into the exact dataframe FinRL's preprocessor expects
+     (date/open/high/low/close/volume/tic/day, close = adjusted close) --
+     the same output format as
      finrl.meta.preprocessor.yahoodownloader.YahooDownloader.fetch_data().
      YahooDownloader itself is NOT called: with every yfinance version that
      still works against Yahoo today (>=0.2.54), fetch_data() crashes --
@@ -41,19 +42,73 @@ from finrl.meta.preprocessor.preprocessors import FeatureEngineer, data_split
 INITIAL_AMOUNT = 1_000_000
 
 
-def download_finrl_frame(ticker: str, start: str, end: str) -> pd.DataFrame:
-    """Download with yfinance and return FinRL's YahooDownloader format.
+def _finrl_frame(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    """Shape a raw OHLCV frame into FinRL's YahooDownloader output format.
 
-    Yahoo intermittently rate-limits GitHub-runner IPs
-    (YFRateLimitError / HTTP 429), so retry with backoff; a fresh
-    dispatch also lands on a different runner IP. (A curl_cffi
-    Chrome-impersonating session does NOT help here: yfinance 0.2.55
-    cannot handle curl_cffi sessions -- "'str' object has no attribute
-    'name'" -- and the yfinance versions that can, >=0.2.60, need
-    websockets>=13, which conflicts with alpaca-trade-api's
-    websockets<11 pin. Verified on the runner, 2026-11-10.)
+    Input columns (already lower-cased, spaces removed): date, open, high,
+    low, close, volume and optionally adjclose. Following FinRL's
+    YahooDownloader convention, the adjusted close becomes `close`.
+    """
+    df = df.copy()
+    if "adjclose" in df.columns:
+        df["close"] = df["adjclose"]
+        df = df.drop(labels="adjclose", axis=1)
+    df["tic"] = ticker
+    df["day"] = pd.to_datetime(df["date"]).dt.dayofweek
+    df["date"] = pd.to_datetime(df["date"]).apply(lambda x: x.strftime("%Y-%m-%d"))
+    df = df.dropna().reset_index(drop=True)
+    df = df.sort_values(by=["date", "tic"]).reset_index(drop=True)
+    return df[["date", "open", "high", "low", "close", "volume", "tic", "day"]]
+
+
+def _download_yahooquery(ticker: str, start: str, end: str) -> pd.DataFrame:
+    """Primary route: yahooquery's history endpoint.
+
+    Verified 2026-11-10 (moos-labs/yahooquery-runner): yahooquery fetched
+    full AAPL and POUL.CA history from GitHub-runner IPs at times when
+    both yfinance and the raw Yahoo chart API were returning HTTP 429.
+    """
+    from yahooquery import Ticker
+
+    hist = Ticker(ticker).history(start=start, end=end)
+    if hist is None or len(hist) == 0:
+        raise ValueError("yahooquery returned no rows")
+    df = hist.reset_index()
+    df.columns = [str(c).lower().replace(" ", "") for c in df.columns]
+    cols = ["date", "open", "high", "low", "close", "volume"]
+    if "adjclose" in df.columns:
+        cols.append("adjclose")
+    return _finrl_frame(df[cols], ticker)
+
+
+def download_finrl_frame(ticker: str, start: str, end: str) -> pd.DataFrame:
+    """Download OHLCV data and return FinRL's YahooDownloader format.
+
+    Route order: yahooquery first (see _download_yahooquery), then
+    yfinance as a fallback. Yahoo intermittently rate-limits
+    GitHub-runner IPs (YFRateLimitError / HTTP 429) -- pilot runs 2, 3
+    and 5 died on yfinance 429s alone -- so both routes retry with
+    backoff, and a fresh dispatch also lands on a different runner IP.
+    (A curl_cffi Chrome-impersonating session does NOT help the
+    yfinance route: yfinance 0.2.55 cannot handle curl_cffi sessions --
+    "'str' object has no attribute 'name'" -- and the yfinance versions
+    that can, >=0.2.60, need websockets>=13, which conflicts with
+    alpaca-trade-api's websockets<11 pin. Verified on the runner,
+    2026-11-10.)
     """
     import time
+
+    errors: list[str] = []
+    for attempt in range(1, 4):
+        try:
+            df = _download_yahooquery(ticker, start, end)
+            if len(df) > 0:
+                print(f"data source: yahooquery (attempt {attempt})")
+                return df
+        except Exception as e:
+            errors.append(f"yahooquery attempt {attempt}: {e!r}")
+        print(f"yahooquery attempt {attempt} returned no data; retrying...")
+        time.sleep(15 * attempt)
 
     raw = None
     last_err = None
@@ -76,21 +131,17 @@ def download_finrl_frame(ticker: str, start: str, end: str) -> pd.DataFrame:
         time.sleep(20 * attempt)
     if raw is None or len(raw) == 0:
         raise ValueError(
-            f"no data fetched for {ticker} {start}..{end} (last error: {last_err})"
+            f"no data fetched for {ticker} {start}..{end} "
+            f"(yfinance last error: {last_err}; yahooquery errors: {errors})"
         )
+    print("data source: yfinance (fallback)")
     df = raw.reset_index()
     # yfinance columns: Date, Open, High, Low, Close, Adj Close, Volume
     df.columns = [str(c).lower().replace(" ", "") for c in df.columns]
-    df = df.rename(columns={"date": "date", "adjclose": "adjcp"})
-    df["tic"] = ticker
-    # FinRL's YahooDownloader uses adjusted close as the close price.
-    df["close"] = df["adjcp"]
-    df = df.drop(labels="adjcp", axis=1)
-    df["day"] = pd.to_datetime(df["date"]).dt.dayofweek
-    df["date"] = pd.to_datetime(df["date"]).apply(lambda x: x.strftime("%Y-%m-%d"))
-    df = df.dropna().reset_index(drop=True)
-    df = df.sort_values(by=["date", "tic"]).reset_index(drop=True)
-    return df[["date", "open", "high", "low", "close", "volume", "tic", "day"]]
+    cols = ["date", "open", "high", "low", "close", "volume"]
+    if "adjclose" in df.columns:
+        cols.append("adjclose")
+    return _finrl_frame(df[cols], ticker)
 
 
 def main() -> int:
