@@ -63,7 +63,7 @@ the trade env.
   yfinance ≤0.2.43 (the old flat format) downloads nothing from Yahoo any
   more. The script therefore downloads with yfinance directly
   (`auto_adjust=False, multi_level_index=False`, pinned
-  `yfinance==0.2.66`) and shapes the result into the exact dataframe
+  `yfinance==0.2.55`) and shapes the result into the exact dataframe
   format `YahooDownloader.fetch_data()` produced (close = adjusted close),
   then uses FinRL's own `FeatureEngineer` / `data_split` / env / agent.
 - **This is a smoke test, not research.** 8,000 A2C timesteps on one stock
