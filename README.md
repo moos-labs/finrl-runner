@@ -60,9 +60,13 @@ the trade env.
   requires `websockets>=13`, which pip cannot resolve alongside
   alpaca-trade-api (the first pilot run failed on exactly this conflict).
 - **Yahoo rate-limits GitHub-runner IPs intermittently**
-  (`YFRateLimitError: Too Many Requests` — pilot runs 2 and 3 died at the
-  download step for this reason alone, after install and all FinRL
-  imports had succeeded). The script retries the download up to 3 times
+  (`YFRateLimitError: Too Many Requests` — pilot runs 2, 3 and 5 all died
+  at the download step for this reason alone, after install and all
+  FinRL imports had succeeded; as of 2026-11-10 the pilot has therefore
+  not yet produced a backtest result, and no result numbers exist).
+  The identical yfinance call downloads AAPL fine from a non-GitHub IP,
+  so this is Yahoo throttling GitHub's shared runner IPs, not bad code:
+  re-dispatch the workflow later and it should proceed. The script retries the download up to 3 times
   with backoff, and a re-dispatch lands on a fresh runner IP. A
   `curl_cffi` Chrome-impersonating session was tried and reverted:
   yfinance 0.2.55 cannot handle curl_cffi sessions
