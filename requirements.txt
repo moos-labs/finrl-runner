@@ -7,7 +7,7 @@ numpy==1.26.4
 pandas==2.2.2
 matplotlib==3.8.4
 stockstats==0.6.11
-yfinance==0.2.66
+yfinance==0.2.55
 alpaca-trade-api==3.2.0
 exchange-calendars==4.13.2
 wrds==3.5.0
