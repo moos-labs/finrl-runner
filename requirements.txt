@@ -1,0 +1,13 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+finrl==0.3.7
+torch==2.3.1+cpu
+stable-baselines3==2.3.2
+gymnasium==0.29.1
+numpy==1.26.4
+pandas==2.2.2
+matplotlib==3.8.4
+stockstats==0.6.11
+yfinance==0.2.66
+alpaca-trade-api==3.2.0
+exchange-calendars==4.13.2
+wrds==3.5.0
