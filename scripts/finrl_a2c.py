@@ -45,18 +45,15 @@ def download_finrl_frame(ticker: str, start: str, end: str) -> pd.DataFrame:
     """Download with yfinance and return FinRL's YahooDownloader format.
 
     Yahoo intermittently rate-limits GitHub-runner IPs
-    (YFRateLimitError / HTTP 429), so download through a curl_cffi
-    Chrome-impersonating session and retry with backoff.
+    (YFRateLimitError / HTTP 429), so retry with backoff; a fresh
+    dispatch also lands on a different runner IP. (A curl_cffi
+    Chrome-impersonating session does NOT help here: yfinance 0.2.55
+    cannot handle curl_cffi sessions -- "'str' object has no attribute
+    'name'" -- and the yfinance versions that can, >=0.2.60, need
+    websockets>=13, which conflicts with alpaca-trade-api's
+    websockets<11 pin. Verified on the runner, 2026-11-10.)
     """
     import time
-
-    session = None
-    try:
-        from curl_cffi import requests as curl_requests
-
-        session = curl_requests.Session(impersonate="chrome")
-    except Exception as e:  # pragma: no cover - fallback path
-        print(f"curl_cffi session unavailable ({e}); using default session")
 
     raw = None
     last_err = None
@@ -69,7 +66,6 @@ def download_finrl_frame(ticker: str, start: str, end: str) -> pd.DataFrame:
                 auto_adjust=False,
                 multi_level_index=False,
                 progress=False,
-                session=session,
             )
         except Exception as e:
             last_err = e
